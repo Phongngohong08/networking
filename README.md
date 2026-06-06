@@ -38,15 +38,65 @@ Tham khảo phần kernel module: [Linux Kernel Labs — Networking](https://lin
 
 > Chạy trên **Ubuntu** (khuyến nghị 22.04 LTS) trong **VMware** hoặc GCP VM. Cần quyền root.
 
-### Cài công cụ build (chạy 1 lần)
+### Thiết lập VM mới từ đầu (chạy 1 lần)
 
+Sau khi cài Ubuntu sạch trên VMware, mở Terminal và chạy lần lượt:
+
+**Bước 1 — Cập nhật hệ thống & cài công cụ cơ bản**
 ```bash
-sudo apt update
-sudo apt install -y build-essential linux-headers-$(uname -r) gcc make net-tools
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y git curl net-tools build-essential
 ```
 
-> Lưu ý: gói `linux-headers-$(uname -r)` phải **khớp đúng** kernel đang chạy thì mới build được module.
-> Kiểm tra: `uname -r` và `ls /lib/modules/$(uname -r)/build`.
+**Bước 2 — Cài công cụ build kernel module (Phần 3) + biên dịch C (Phần 2)**
+```bash
+sudo apt install -y gcc make linux-headers-$(uname -r)
+```
+> Gói `linux-headers-$(uname -r)` phải **khớp đúng** kernel đang chạy mới build được module.
+> Kiểm tra: `uname -r` rồi `ls /lib/modules/$(uname -r)/build` (phải tồn tại).
+> Nếu báo thiếu, thử: `sudo apt install -y linux-headers-generic` và **khởi động lại** VM.
+
+**Bước 3 — Cài Python & Flask (Phần 4 — web dashboard)**
+```bash
+sudo apt install -y python3 python3-pip
+pip3 install flask
+# Nếu Ubuntu chặn pip cài toàn cục (lỗi "externally-managed-environment"):
+#   sudo apt install -y python3-flask
+```
+
+**Bước 4 — Cài 'at' cho phần lập lịch (Phần 1)**
+```bash
+sudo apt install -y at && sudo systemctl enable --now atd
+```
+
+### Kéo dự án về (git clone)
+
+```bash
+# Thay <URL-repo> bằng link repo của nhóm (GitHub/GitLab)
+cd ~
+git clone <URL-repo> networking
+cd networking
+```
+
+> Lần đầu dùng git, cấu hình danh tính (commit mới ghi đúng tên):
+> ```bash
+> git config --global user.name  "Ten cua ban"
+> git config --global user.email "email@cua.ban"
+> ```
+
+> File tạo trên Windows có thể dính ký tự xuống dòng `\r`. Sau khi clone, chạy 1 lần:
+> ```bash
+> sudo apt install -y dos2unix
+> find . -type f \( -name "*.sh" -o -name "*.c" -o -name "Makefile" -o -name "*.py" \) -exec dos2unix {} +
+> ```
+
+### Kiểm tra nhanh đã sẵn sàng chưa
+
+```bash
+git --version && gcc --version | head -1 && make --version | head -1
+python3 --version && python3 -c "import flask; print('flask', flask.__version__)"
+ls /lib/modules/$(uname -r)/build  # in ra đường dẫn => OK để build module
+```
 
 ## Cấu trúc thư mục
 
