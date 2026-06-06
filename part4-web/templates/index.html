@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Đề tài 42 — Networking Dashboard</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>Đề tài 42 — Linux Kernel Networking</h1>
+  <p class="sub">Dashboard demo &amp; điều khiển — L02 2026</p>
+</header>
+
+<main>
+  <!-- Quản lý module -->
+  <section class="card">
+    <h2>Kernel modules</h2>
+    <table id="modules">
+      <thead><tr><th>Module</th><th>Mô tả</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+      <tbody>
+        {% for name, desc in modules.items() %}
+        <tr data-name="{{ name }}">
+          <td><code>{{ name }}</code></td>
+          <td>{{ desc }}</td>
+          <td><span class="badge unknown">?</span></td>
+          <td>
+            <button class="btn load"   onclick="mod('load','{{ name }}')">Load</button>
+            <button class="btn unload" onclick="mod('unload','{{ name }}')">Unload</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Bài 2: lọc IP -->
+  <section class="card">
+    <h2>Bài 2 — Lọc packet theo IP đích</h2>
+    <p class="hint">Cần <code>net_filter</code> đang được Load.</p>
+    <div class="row">
+      <input id="ip" type="text" placeholder="vd: 8.8.8.8">
+      <button class="btn load"   onclick="setFilter()">Chặn IP</button>
+      <button class="btn unload" onclick="clearFilter()">Bỏ chặn</button>
+    </div>
+  </section>
+
+  <!-- Log dmesg realtime -->
+  <section class="card">
+    <h2>Kernel log (dmesg realtime)</h2>
+    <div class="row">
+      <button class="btn" onclick="clearLog()">Xóa màn hình</button>
+      <label><input type="checkbox" id="onlyMod" checked> Chỉ hiện log module dự án</label>
+    </div>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<div id="toast"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

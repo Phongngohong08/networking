@@ -1,0 +1,50 @@
+# ===== Tài liệu (không đẩy file văn phòng lên repo) =====
+*.xlsx
+*.docx
+*.pptx
+*.xls
+*.doc
+*.ppt
+~$*
+
+# ===== Kernel module build (Phần 3) =====
+*.o
+*.ko
+*.mod
+*.mod.c
+*.mod.o
+*.symvers
+*.order
+.*.cmd
+.tmp_versions/
+Module.symvers
+modules.order
+
+# ===== User-space C build (Phần 2) =====
+# binary không có đuôi -> liệt kê tên cụ thể
+part2-userspace/tcp_server
+part2-userspace/tcp_client
+part2-userspace/proc_info
+part2-userspace/file_ops
+part3-kernel-module/filter_ctl
+*.out
+demo.txt
+
+# ===== Web (Phần 4) =====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# ===== Hệ điều hành / IDE =====
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ===== Linh tinh =====
+*.log
+*.tar.gz
+backup_*.tar.gz
