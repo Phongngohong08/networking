@@ -94,7 +94,7 @@ static int __init net_filter_init(void)
 	}
 
 	nfho.hook     = hook_func;
-	nfho.hooknum  = NF_INET_PRE_ROUTING;
+	nfho.hooknum  = NF_INET_LOCAL_OUT;  /* bắt gói đi RA từ máy này */
 	nfho.pf       = PF_INET;
 	nfho.priority = NF_IP_PRI_FIRST;
 	nf_register_net_hook(&init_net, &nfho);
