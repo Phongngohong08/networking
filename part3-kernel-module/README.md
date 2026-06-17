@@ -58,7 +58,7 @@ sudo rmmod ksock_tcp
 # Cửa sổ 1: mở listener trước
 nc -u -l 5005
 # Cửa sổ 2:
-sudo insmod ksock_udp.ko dip="127.0.0.1" dport=5005 msg="Xin chao tu kernel"
+sudo insmod ksock_udp.ko dip="127.0.0.1" dport=5005 "msg=Xin chao tu kernel"
 # -> listener nhận được chuỗi; dmesg báo "da gui N byte"
 sudo rmmod ksock_udp
 ```
