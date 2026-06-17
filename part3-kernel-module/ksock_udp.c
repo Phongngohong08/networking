@@ -8,7 +8,9 @@
  * Test: mo truoc mot listener o user-space roi moi insmod:
  *    nc -u -l 5005
  * roi:
- *    sudo insmod ksock_udp.ko dip="127.0.0.1" dport=5005 msg="Xin chao tu kernel"
+ *    sudo insmod ksock_udp.ko dip="127.0.0.1" dport=5005 'msg="Xin chao tu kernel"'
+ *    Luu y: msg co khoang trang phai boc NGOAC DON bao quat ca key=value,
+ *    de dau ngoac kep duoc truyen nguyen xuong kernel (insmod khong tu xu ly).
  *
  * Tham khao: https://linux-kernel-labs.github.io/refs/heads/master/labs/networking.html
  */
