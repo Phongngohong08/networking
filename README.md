@@ -1,8 +1,6 @@
-# Đề tài 42 — Lập trình nhân Linux: Networking
+# Đề tài 42 — Lập trình nhân Linux
 
 Môn: **Lập trình nhân Linux** — L02 — 2026
-
-Tham khảo phần kernel module: [Linux Kernel Labs — Networking](https://linux-kernel-labs.github.io/refs/heads/master/labs/networking.html)
 
 ## Thành viên nhóm
 
@@ -12,145 +10,142 @@ Tham khảo phần kernel module: [Linux Kernel Labs — Networking](https://lin
 | Ngô Hồng Phong | CT070337 | L01 |
 | Đỗ Minh Thuần  | CT070353 | L01 |
 
-## Mục tiêu đề tài
+## Nội dung đề tài
 
-Đề tài gồm **3 phần** theo yêu cầu chung của môn học:
+Đề tài gồm **3 phần** theo yêu cầu môn học:
 
-1. **Phần 1 — Shell scripting** (`part1-shell/`)
-   Lập trình shell để: quản lý file, lập lịch tác vụ (cron/at), thiết lập thời gian hệ thống,
-   cài đặt/gỡ bỏ chương trình tự động.
+### Phần 1 — Shell scripting (`part1-shell/`)
+Lập trình Bash tự động hóa quản trị hệ thống:
+- `file_manager.sh` — quản lý file/thư mục, sao lưu nén
+- `scheduler.sh` — lập lịch định kỳ (cron) và một lần (at)
+- `set_time.sh` — thiết lập thời gian, múi giờ, đồng bộ NTP
+- `pkg_manager.sh` — cài/gỡ phần mềm tự động qua apt
 
-2. **Phần 2 — Lập trình user-space** (`part2-userspace/`)
-   Quản lý tiến trình, file, **socket và network** trong Ubuntu (C, dùng syscall/POSIX).
+### Phần 2 — Lập trình user-space (`part2-userspace/`)
+Quản lý tiến trình, file và socket mạng trong C (POSIX/syscall):
+- `proc_info.c` — đọc `/proc/<pid>/status`, liệt kê tiến trình
+- `file_ops.c` — `open/read/write/stat` thao tác file
+- `tcp_server.c` / `tcp_client.c` — socket TCP echo
 
-3. **Phần 3 — Kernel module: Networking** (`part3-kernel-module/`) — *phần trọng tâm*
-   Viết mô-đun nhân và tích hợp vào hệ thống. Triển khai **đủ 5 bài** của lab:
-   - Bài 1: Bắt/giám sát packet bằng **netfilter hooks** (`sk_buff`, `ip_hdr/tcp_hdr/udp_hdr`)
-   - Bài 2: Lọc packet theo địa chỉ đích, cấu hình qua **ioctl**
-   - Bài 3+4: Tạo socket trong kernel (`sock_create_kern`), **listen/accept TCP** cổng 60000
-   - Bài 5: **Gửi UDP từ kernel** (`kernel_sendmsg`)
+### Phần 3 — Kernel module (`part3-kernel-module/`) — *TRỌNG TÂM*
+Module nhân `steg_net.ko`: **giấu tin trong gói TCP** (network steganography).
 
-4. **Phần 4 — Web dashboard** (`part4-web/`) — *demo bổ trợ*
-   Bảng điều khiển Flask: load/unload module, xem **log dmesg realtime**, cấu hình
-   lọc IP — tất cả từ trình duyệt. Backend chạy lệnh hệ thống qua subprocess.
+Kỹ thuật: nhúng từng byte của thông điệp bí mật vào trường **IP Identification**
+(16-bit) của mỗi gói TCP. Byte cao = `0xAB` (magic marker), byte thấp = ký tự cần giấu.
+Phía nhận đọc IP ID và tái tạo thông điệp.
 
-## Môi trường chạy
-
-> Chạy trên **Ubuntu** (khuyến nghị 22.04 LTS) trong **VMware** hoặc GCP VM. Cần quyền root.
-
-### Thiết lập VM mới từ đầu (chạy 1 lần)
-
-Sau khi cài Ubuntu sạch trên VMware, mở Terminal và chạy lần lượt:
-
-**Bước 1 — Cập nhật hệ thống & cài công cụ cơ bản**
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y git curl net-tools build-essential
+```
+IP_ID = 0xAB48  →  ký tự 'H' (0x48)
+IP_ID = 0xAB45  →  ký tự 'E' (0x45)
+IP_ID = 0xAB4C  →  ký tự 'L' ...
 ```
 
-**Bước 2 — Cài công cụ build kernel module (Phần 3) + biên dịch C (Phần 2)**
-```bash
-sudo apt install -y gcc make linux-headers-$(uname -r)
-```
-> Gói `linux-headers-$(uname -r)` phải **khớp đúng** kernel đang chạy mới build được module.
-> Kiểm tra: `uname -r` rồi `ls /lib/modules/$(uname -r)/build` (phải tồn tại).
-> Nếu báo thiếu, thử: `sudo apt install -y linux-headers-generic` và **khởi động lại** VM.
+Sử dụng hai Netfilter hook:
+- `NF_INET_LOCAL_OUT` — nhúng tin vào gói TCP đi ra
+- `NF_INET_PRE_ROUTING` — trích xuất từ gói TCP đến
 
-**Bước 3 — Cài Python & Flask (Phần 4 — web dashboard)**
-```bash
-sudo apt install -y python3 python3-pip
-pip3 install flask
-# Nếu Ubuntu chặn pip cài toàn cục (lỗi "externally-managed-environment"):
-#   sudo apt install -y python3-flask
-```
-
-**Bước 4 — Cài 'at' cho phần lập lịch (Phần 1)**
-```bash
-sudo apt install -y at && sudo systemctl enable --now atd
-```
-
-### Kéo dự án về (git clone)
-
-```bash
-# Thay <URL-repo> bằng link repo của nhóm (GitHub/GitLab)
-cd ~
-git clone <URL-repo> networking
-cd networking
-```
-
-> Lần đầu dùng git, cấu hình danh tính (commit mới ghi đúng tên):
-> ```bash
-> git config --global user.name  "Ten cua ban"
-> git config --global user.email "email@cua.ban"
-> ```
-
-> File tạo trên Windows có thể dính ký tự xuống dòng `\r`. Sau khi clone, chạy 1 lần:
-> ```bash
-> sudo apt install -y dos2unix
-> find . -type f \( -name "*.sh" -o -name "*.c" -o -name "Makefile" -o -name "*.py" \) -exec dos2unix {} +
-> ```
-
-### Kiểm tra nhanh đã sẵn sàng chưa
-
-```bash
-git --version && gcc --version | head -1 && make --version | head -1
-python3 --version && python3 -c "import flask; print('flask', flask.__version__)"
-ls /lib/modules/$(uname -r)/build  # in ra đường dẫn => OK để build module
-```
+Theo dõi qua `/proc/steg_net`.
 
 ## Cấu trúc thư mục
 
 ```
 networking/
-├── README.md                 # file này
-├── part1-shell/              # Phần 1: shell scripts
-│   ├── README.md
+├── README.md
+├── part1-shell/
 │   ├── file_manager.sh
 │   ├── scheduler.sh
 │   ├── set_time.sh
 │   └── pkg_manager.sh
-├── part2-userspace/          # Phần 2: chương trình C user-space
-│   ├── README.md
+├── part2-userspace/
 │   ├── Makefile
-│   ├── proc_info.c           # quản lý tiến trình
-│   ├── file_ops.c            # thao tác file
-│   ├── tcp_server.c          # socket server
-│   └── tcp_client.c          # socket client
-└── part3-kernel-module/      # Phần 3: kernel module networking (5 bài lab)
-    ├── README.md
-    ├── Makefile
-    ├── net_monitor.c         # Bài 1: netfilter hook log packet TCP/UDP/ICMP
-    ├── net_filter.c          # Bài 2: lọc packet theo IP đích (ioctl)
-    ├── filter_ctl.c          # công cụ user-space điều khiển net_filter
-    ├── ksock_tcp.c           # Bài 3+4: TCP listen/accept trong kernel
-    └── ksock_udp.c           # Bài 5: gửi UDP từ kernel
-│
-└── part4-web/                # Phần 4: web dashboard demo (Flask)
-    ├── app.py                # backend: load/unload, stream dmesg, filter
-    ├── templates/index.html
-    ├── static/{style.css,app.js}
-    ├── requirements.txt
-    └── README.md             # cách chạy + cấu hình sudoers
+│   ├── proc_info.c
+│   ├── file_ops.c
+│   ├── tcp_server.c
+│   └── tcp_client.c
+├── part3-kernel-module/        ← MODULE NHÂN (trọng tâm)
+│   ├── steg_net.c              ← module giấu tin trong TCP
+│   └── Makefile
+├── part4-web/                  ← web demo bổ trợ (Flask)
+│   ├── app.py
+│   ├── templates/
+│   └── static/
+└── docs/
+    ├── BAOCAO.md               ← nguồn báo cáo (Markdown)
+    ├── build_docx.py           ← sinh BaoCao_DeTai42_Networking.docx
+    └── build_pptx.py           ← sinh ThuyetTrinh_DeTai42_Networking.pptx
 ```
 
-## Cách build & chạy nhanh
+## Thiết lập VM từ đầu
+
+> Chạy trên **Ubuntu 22.04 LTS** trong VMware/VirtualBox. Cần quyền root.
+
+**Bước 1 — Cập nhật & công cụ cơ bản**
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y git curl net-tools build-essential dos2unix
+```
+
+**Bước 2 — Build kernel module (Phần 3)**
+```bash
+sudo apt install -y gcc make linux-headers-$(uname -r)
+# Kiểm tra: ls /lib/modules/$(uname -r)/build  (phải có thư mục này)
+```
+
+**Bước 3 — Python & Flask (web demo)**
+```bash
+sudo apt install -y python3 python3-pip
+pip3 install flask
+# Nếu lỗi "externally-managed-environment": sudo apt install -y python3-flask
+```
+
+**Bước 4 — Gói at (lập lịch một lần, Phần 1)**
+```bash
+sudo apt install -y at && sudo systemctl enable --now atd
+```
+
+**Kéo dự án**
+```bash
+git clone <URL-repo> networking
+cd networking
+# Xử lý ký tự \r nếu file tạo trên Windows:
+find . -type f \( -name "*.sh" -o -name "*.c" -o -name "Makefile" -o -name "*.py" \) \
+  -exec dos2unix {} +
+```
+
+**Kiểm tra nhanh**
+```bash
+gcc --version | head -1
+ls /lib/modules/$(uname -r)/build
+python3 -c "import flask; print('flask ok')"
+```
+
+## Chạy nhanh
 
 ```bash
-# Phần 2 (user-space)
-cd part2-userspace && make
-./tcp_server 60000          # cửa sổ 1
-./tcp_client 127.0.0.1 60000  # cửa sổ 2
+# Phần 1
+cd part1-shell && chmod +x *.sh && ./file_manager.sh
 
-# Phần 3 (kernel module)
+# Phần 2
+cd part2-userspace && make
+./tcp_server 60000 &  &&  ./tcp_client 127.0.0.1 60000
+
+# Phần 3 — module nhân (trọng tâm)
 cd part3-kernel-module && make
-sudo insmod net_monitor.ko
-sudo dmesg -w               # xem log packet bắt được
-sudo rmmod net_monitor      # gỡ module
+sudo insmod steg_net.ko peer_ip=127.0.0.1 'secret="HELLO"'
+# terminal 1: nc -l 7777
+# terminal 2: echo test | nc 127.0.0.1 7777
+sudo dmesg | grep steg
+cat /proc/steg_net
+sudo rmmod steg_net
+
+# Tài liệu
+cd docs
+python3 build_docx.py   # → BaoCao_DeTai42_Networking.docx
+python3 build_pptx.py   # → ThuyetTrinh_DeTai42_Networking.pptx
 ```
 
-Xem `README.md` trong từng thư mục con để biết chi tiết.
+## Cảnh báo
 
-## Cảnh báo an toàn
-
-- Code kernel chạy ở ring 0: lỗi có thể **treo/panic máy ảo**. Luôn test trong VM, **snapshot trước khi insmod**.
-- Luôn `rmmod` module trước khi tắt máy/sửa code.
+- Code kernel chạy ở **ring 0**: lỗi có thể crash/panic máy ảo.
+- Luôn **snapshot trước khi `insmod`**.
+- Luôn `sudo rmmod steg_net` trước khi sửa code và build lại.

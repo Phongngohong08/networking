@@ -1,349 +1,518 @@
 # Báo cáo cuối kỳ — Lập trình nhân Linux
 
-**Đề tài 42:** Lập trình shell để quản lý file, lập lịch tác vụ, thiết lập thời gian hệ thống, cài đặt/gỡ bỏ các chương trình tự động; Lập trình quản lý tiến trình, file, socket và network trong Ubuntu; Lập trình xây dựng một mô-đun nhân và tích hợp vào hệ thống — **Networking**.
+**Đề tài 42:** Lập trình shell để quản lý file, lập lịch tác vụ, thiết lập thời gian hệ thống, cài đặt/gỡ bỏ các chương trình tự động; Lập trình quản lý tiến trình, file, socket và network trong Ubuntu; Xây dựng mô-đun nhân **giấu tin trong gói TCP/UDP** và tích hợp vào hệ thống.
 
 ---
 
 ## LỜI MỞ ĐẦU
 
-Nhân (kernel) là thành phần cốt lõi của hệ điều hành, chịu trách nhiệm quản lý tài nguyên phần cứng, tiến trình, bộ nhớ và đặc biệt là toàn bộ hoạt động truyền thông mạng. Trong khi lập trình ứng dụng thông thường chỉ làm việc ở không gian người dùng (user space) thông qua các lời gọi hệ thống, thì lập trình ở mức nhân cho phép can thiệp trực tiếp vào luồng xử lý gói tin, giám sát và điều khiển mạng ở mức sâu nhất mà các công cụ user-space không thể tiếp cận.
+Nhân Linux (Linux Kernel) là thành phần cốt lõi của hệ điều hành, chịu trách nhiệm quản lý tài nguyên phần cứng, tiến trình, bộ nhớ và toàn bộ hoạt động mạng. Lập trình ở mức nhân cho phép can thiệp trực tiếp vào luồng xử lý gói tin — điều mà các chương trình user-space không thể thực hiện được.
 
-Đề tài của nhóm tập trung vào chủ đề **Networking** trong nhân Linux: xây dựng các mô-đun nhân (kernel module) có khả năng bắt giữ, phân tích và lọc gói tin bằng cơ chế **Netfilter**, cũng như tạo socket và truyền/nhận dữ liệu ngay trong không gian nhân. Bên cạnh đó, nhóm cũng triển khai các phần bổ trợ về lập trình shell và lập trình user-space để minh họa bức tranh tổng thể từ tầng ứng dụng xuống tầng nhân.
+Đề tài của nhóm gồm ba phần: lập trình shell tự động hoá tác vụ hệ thống, lập trình C user-space quản lý tiến trình và mạng, và phần trọng tâm là xây dựng mô-đun nhân thực hiện kỹ thuật **giấu tin trong gói TCP** (network steganography) — một ứng dụng thực tế của lập trình mạng ở mức nhân.
 
-Trong quá trình thực hiện không tránh khỏi thiếu sót, nhóm rất mong nhận được sự góp ý của thầy/cô để hoàn thiện hơn. Nhóm xin chân thành cảm ơn!
+Nhóm xin chân thành cảm ơn thầy/cô đã hướng dẫn trong quá trình thực hiện đề tài!
 
 ---
 
 ## CHƯƠNG 1. TỔNG QUAN ĐỀ TÀI
 
-### 1.1 Giới thiệu đề tài
+### 1.1 Giới thiệu
 
-Đề tài được chia thành ba phần với phần trọng tâm là lập trình mạng ở mức nhân:
+Đề tài 42 bao gồm ba phần:
 
-1. **Lập trình shell**: quản lý file, lập lịch tác vụ, thiết lập thời gian hệ thống, cài đặt/gỡ bỏ chương trình tự động.
-2. **Lập trình user-space**: quản lý tiến trình, file, socket và network trong Ubuntu.
-3. **Lập trình kernel module — Networking** *(trọng tâm)*: xây dựng mô-đun nhân thực hiện các tác vụ mạng (giám sát, lọc gói tin, socket trong nhân) và tích hợp vào hệ thống.
+1. **Lập trình shell** — viết script Bash tự động hoá quản lý file, lập lịch tác vụ, thiết lập thời gian và quản lý gói phần mềm.
+2. **Lập trình C user-space** — quản lý tiến trình, thao tác file hệ thống và lập trình socket TCP/UDP trong Ubuntu.
+3. **Xây dựng mô-đun nhân** *(trọng tâm)* — module `steg_net` giấu thông điệp bí mật trong trường **IP Identification** của gói TCP sử dụng framework Netfilter.
 
 ### 1.2 Mục tiêu
 
-- Hiểu kiến trúc tầng mạng (network stack) của nhân Linux và đường đi của một gói tin.
-- Nắm vững cơ chế **Netfilter hook** để chặn/giám sát gói tin tại các điểm khác nhau trong stack.
-- Biết cách đọc thông tin gói tin qua cấu trúc `sk_buff` (IP, TCP, UDP header).
-- Lập trình socket **trong không gian nhân**: tạo socket, lắng nghe, nhận và gửi dữ liệu.
-- Giao tiếp giữa user-space và kernel thông qua cơ chế **ioctl**.
-- Tích hợp, nạp/gỡ mô-đun vào hệ thống đang chạy và kiểm thử kết quả.
+- Thành thạo lập trình Bash, bao gồm xử lý file, cron/at, timedatectl và apt.
+- Sử dụng syscall POSIX để quản lý tiến trình, file và socket trong C.
+- Hiểu cấu trúc module nhân Linux: `module_init/exit`, `MODULE_LICENSE`, nạp/gỡ mô-đun.
+- Nắm vững framework **Netfilter**: đăng ký hook, đọc gói tin qua `struct sk_buff`.
+- Triển khai kỹ thuật **steganography mạng**: nhúng và trích xuất dữ liệu ẩn trong header gói tin.
 
 ### 1.3 Môi trường thực hiện
 
 | Thành phần | Giá trị |
 |---|---|
-| Hệ điều hành | Ubuntu Server (kernel 5.15.0-179-generic) |
-| Ảo hóa | VMware / VirtualBox |
-| Trình biên dịch | gcc, make |
-| Gói phụ thuộc | build-essential, linux-headers-$(uname -r) |
-| Ngôn ngữ | C (kernel & user-space), Bash (shell), Python/Flask (demo) |
+| Hệ điều hành | Ubuntu Server 22.04 (kernel 5.15.0-generic) |
+| Ảo hóa | VMware Workstation / VirtualBox |
+| Trình biên dịch | gcc 11, make |
+| Gói phụ thuộc | `build-essential`, `linux-headers-$(uname -r)` |
+| Ngôn ngữ | C (nhân & user-space), Bash |
 
 ---
 
-## CHƯƠNG 2. CƠ SỞ LÝ THUYẾT
+## CHƯƠNG 2. LẬP TRÌNH SHELL
 
-### 2.1 Kiến trúc tầng mạng trong nhân Linux
+### 2.1 Tổng quan
 
-Khi một gói tin đi vào hoặc đi ra khỏi máy, nó phải đi qua một chuỗi xử lý trong nhân Linux gọi là *network stack*. Stack này được tổ chức theo mô hình phân tầng (tương ứng mô hình TCP/IP): tầng liên kết (link), tầng mạng (IP), tầng giao vận (TCP/UDP) và cuối cùng được chuyển lên cho ứng dụng ở user-space thông qua socket.
+Phần này gồm bốn script Bash, mỗi script thực hiện một nhóm chức năng quản trị hệ thống:
 
-Điểm mấu chốt là toàn bộ gói tin — kể cả lưu lượng localhost — đều đi qua nhân. Vì vậy, can thiệp ở mức nhân cho phép quan sát và điều khiển mạng một cách toàn diện.
-
-### 2.2 Cấu trúc `struct sk_buff`
-
-`sk_buff` (socket buffer) là cấu trúc trung tâm biểu diễn một gói tin trong nhân Linux. Mỗi gói tin khi đi qua stack đều được đóng gói trong một `sk_buff` chứa dữ liệu gói cùng các con trỏ tới từng tầng header. Nhân cung cấp các hàm trợ giúp để truy cập header:
-
-- `ip_hdr(skb)` — trả về con trỏ tới IP header (`struct iphdr`).
-- `tcp_hdr(skb)` — trả về con trỏ tới TCP header (`struct tcphdr`).
-- `udp_hdr(skb)` — trả về con trỏ tới UDP header (`struct udphdr`).
-
-Từ các header này ta đọc được địa chỉ nguồn/đích (`saddr`, `daddr`), cổng (`source`, `dest`), giao thức (`protocol`) và các cờ điều khiển (SYN, ACK, FIN...).
-
-### 2.3 `struct socket` và `struct sock`
-
-- `struct socket`: lớp trừu tượng BSD socket ở phía giao tiếp, chứa trường `ops` (các thao tác theo giao thức) và `sk` (liên kết tới socket INET nội bộ).
-- `struct sock`: biểu diễn nội bộ của một socket INET, lưu trạng thái kết nối, thông tin giao thức và các hàm callback khi có sự kiện (dữ liệu đến, đổi trạng thái...).
-
-### 2.4 Netfilter và các điểm hook
-
-**Netfilter** là khung (framework) cho phép đăng ký các hàm callback (*hook*) vào những vị trí cố định trên đường đi của gói tin. Đây là nền tảng của `iptables`/`nftables`. Một hook được mô tả bằng `struct nf_hook_ops` và đăng ký qua `nf_register_net_hook()`.
-
-Các điểm hook chính cho IPv4:
-
-| Hook | Vị trí | Dùng để |
-|---|---|---|
-| `NF_INET_PRE_ROUTING` | Ngay khi gói vừa vào, trước định tuyến | Lọc/giám sát gói **đến** |
-| `NF_INET_LOCAL_IN` | Gói đến tiến trình cục bộ | Firewall inbound |
-| `NF_INET_FORWARD` | Gói được chuyển tiếp | Router/NAT |
-| `NF_INET_LOCAL_OUT` | Gói do chính máy tạo ra, đi ra | Lọc/giám sát gói **đi** |
-| `NF_INET_POST_ROUTING` | Trước khi gói rời máy | NAT nguồn |
-
-Hàm hook trả về giá trị quyết định số phận gói tin, phổ biến nhất là:
-
-- `NF_ACCEPT` — cho gói đi tiếp.
-- `NF_DROP` — loại bỏ gói tin.
-
-### 2.5 Lập trình socket trong không gian nhân
-
-Nhân cung cấp API để tạo và thao tác socket ngay trong kernel, song song với API user-space:
-
-- `sock_create_kern()` — tạo socket trong nhân.
-- `kernel_bind()`, `kernel_listen()`, `kernel_accept()` — tương ứng với `bind/listen/accept`.
-- `kernel_sendmsg()`, `kernel_recvmsg()` — gửi/nhận dữ liệu, dùng cùng `struct msghdr` và `struct kvec`.
-
-### 2.6 Cơ sở các phần bổ trợ
-
-- **Shell scripting**: ngôn ngữ kịch bản của Bash, thao tác hệ thống qua các lệnh (`crontab`, `at`, `timedatectl`, `apt`).
-- **Lập trình user-space**: sử dụng các lời gọi hệ thống POSIX (`socket`, `open`, `read`, `/proc`) để quản lý tiến trình, file và mạng.
-- **Kernel module & ioctl**: cơ chế nạp mã vào nhân lúc chạy (`insmod`/`rmmod`) và kênh giao tiếp user↔kernel qua `ioctl` trên thiết bị ký tự.
-
----
-
-## CHƯƠNG 3. PHÂN TÍCH, THIẾT KẾ VÀ TRIỂN KHAI
-
-### 3.1 Tổng quan kiến trúc dự án
-
-Dự án được tổ chức thành bốn phần độc lập:
-
-```
-networking/
-├── part1-shell/          # Phần 1: shell scripts
-├── part2-userspace/      # Phần 2: chương trình C user-space
-├── part3-kernel-module/  # Phần 3: kernel module networking (TRỌNG TÂM)
-└── part4-web/            # Phần 4: web dashboard demo (bổ trợ)
-```
-
-### 3.2 Phần 1 — Lập trình shell (tóm tắt)
-
-Gồm bốn script Bash:
-
-| Script | Chức năng |
+| Script | Chức năng chính |
 |---|---|
-| `file_manager.sh` | Menu quản lý file/thư mục: liệt kê, tạo, xóa, tìm, sao lưu (tar.gz) |
-| `scheduler.sh` | Lập lịch tác vụ bằng `cron` và `at` |
-| `set_time.sh` | Xem/thiết lập thời gian, đồng bộ NTP, đổi múi giờ qua `timedatectl` |
-| `pkg_manager.sh` | Cài đặt/gỡ bỏ chương trình tự động qua `apt`, hỗ trợ cài hàng loạt từ file |
+| `file_manager.sh` | Quản lý file/thư mục: liệt kê, tạo, xóa, tìm kiếm, sao lưu nén `.tar.gz` |
+| `scheduler.sh` | Lập lịch tác vụ định kỳ bằng `cron`, tác vụ một lần bằng `at` |
+| `set_time.sh` | Xem/thiết lập ngày giờ hệ thống, đổi múi giờ, đồng bộ NTP qua `timedatectl` |
+| `pkg_manager.sh` | Cài đặt/gỡ bỏ phần mềm qua `apt`, hỗ trợ cài hàng loạt từ danh sách file |
 
-### 3.3 Phần 2 — Lập trình user-space (tóm tắt)
+### 2.2 Quản lý file — `file_manager.sh`
 
-Gồm các chương trình C minh họa quản lý tiến trình, file và socket:
+Script sử dụng menu dạng `select` để người dùng chọn thao tác. Tính năng sao lưu dùng `tar -czf` để nén thư mục, kết hợp timestamp vào tên file để tránh ghi đè:
 
-| Chương trình | Chức năng |
-|---|---|
-| `proc_info.c` | Liệt kê tiến trình đang chạy bằng cách đọc thư mục `/proc` |
-| `file_ops.c` | Tạo/ghi/đọc file và xem thông tin file qua syscall (`open/read/write/stat`) |
-| `tcp_server.c` | Socket server TCP, nhận và echo dữ liệu từ client |
-| `tcp_client.c` | Socket client TCP kết nối tới server |
-
-### 3.4 Phần 3 — Kernel module Networking (TRỌNG TÂM)
-
-Phần này triển khai đầy đủ năm bài thực hành của Linux Kernel Labs về networking, mỗi bài là một mô-đun nhân độc lập.
-
-#### 3.4.1 Bài 1 — Giám sát gói tin (`net_monitor.c`)
-
-Mô-đun đăng ký một Netfilter hook tại `NF_INET_PRE_ROUTING` để bắt mọi gói tin đến. Với mỗi gói IP, mô-đun đọc header và in ra nhật ký nhân (dmesg): giao thức, địa chỉ nguồn → đích, cổng và cờ TCP.
-
-Đoạn mã cốt lõi của hàm hook:
-
-```c
-static unsigned int hook_func(void *priv, struct sk_buff *skb,
-                              const struct nf_hook_state *state)
-{
-    struct iphdr *iph = ip_hdr(skb);
-    if (!iph) return NF_ACCEPT;
-
-    switch (iph->protocol) {
-    case IPPROTO_TCP: {
-        struct tcphdr *tcph = tcp_hdr(skb);
-        pr_info("net_monitor: TCP %pI4:%u -> %pI4:%u [%s%s%s]\n",
-                &iph->saddr, ntohs(tcph->source),
-                &iph->daddr, ntohs(tcph->dest),
-                tcph->syn ? "SYN " : "", tcph->ack ? "ACK " : "",
-                tcph->fin ? "FIN " : "");
-        break;
-    }
-    /* ... UDP, ICMP tương tự ... */
-    }
-    return NF_ACCEPT;   /* chỉ giám sát, không chặn */
+```bash
+backup_dir() {
+    local target="$1"
+    local dest="backup_$(basename "$target")_$(date +%Y%m%d_%H%M%S).tar.gz"
+    tar -czf "$dest" "$target" && echo "Da sao luu: $dest"
 }
 ```
 
-Đăng ký hook trong hàm init:
+### 2.3 Lập lịch tác vụ — `scheduler.sh`
 
-```c
-nfho.hook     = hook_func;
-nfho.hooknum  = NF_INET_PRE_ROUTING;
-nfho.pf       = PF_INET;
-nfho.priority = NF_IP_PRI_FIRST;
-nf_register_net_hook(&init_net, &nfho);
+Script hỗ trợ hai cơ chế lập lịch của Linux:
+- **cron**: thêm/xóa/liệt kê crontab với cú pháp `cron expression` (phút, giờ, ngày, tháng, thứ).
+- **at**: thực thi một lần tại thời điểm cụ thể, ví dụ `echo "cleanup.sh" | at 02:00`.
+
+### 2.4 Thiết lập thời gian — `set_time.sh`
+
+Sử dụng `timedatectl` — công cụ hệ thống của systemd để quản lý thời gian. Script cho phép bật/tắt đồng bộ NTP, đổi múi giờ và xem trạng thái thời gian hiện tại:
+
+```bash
+timedatectl set-timezone Asia/Ho_Chi_Minh
+timedatectl set-ntp true
+timedatectl status
 ```
 
-#### 3.4.2 Bài 2 — Lọc gói tin theo địa chỉ đích (`net_filter.c` + `filter_ctl.c`)
+### 2.5 Quản lý gói — `pkg_manager.sh`
 
-Mô-đun chặn (DROP) các gói tin có địa chỉ IP đích trùng với giá trị được cấu hình động. Việc cấu hình được thực hiện từ user-space thông qua **ioctl**: mô-đun tạo thiết bị ký tự `/dev/netfilter_ctl`, công cụ `filter_ctl` gửi địa chỉ IP cần chặn xuống nhân.
+Script bọc lại `apt-get` để cung cấp giao diện thân thiện hơn, hỗ trợ:
+- Cài/gỡ từng gói với kiểm tra quyền root.
+- Cài hàng loạt từ file danh sách (`packages.txt`), mỗi dòng một tên gói.
+- Hiển thị danh sách gói đã cài và trạng thái.
 
-Điểm quan trọng về kỹ thuật: vì mục tiêu là chặn gói **đi ra** từ máy (ví dụ `ping` tới một IP), hook phải đặt tại `NF_INET_LOCAL_OUT` chứ không phải `PRE_ROUTING`. Lý do: gói `ping` đi ra có `daddr` là IP cần chặn, trong khi gói phản hồi đi vào lại có `daddr` là IP của chính máy ta — nếu hook ở `PRE_ROUTING` sẽ không khớp và không chặn được.
+*[Hình 2.1 — Minh họa chạy file_manager.sh và scheduler.sh]*
+
+---
+
+## CHƯƠNG 3. LẬP TRÌNH C TRONG LINUX
+
+### 3.1 Tổng quan
+
+Phần này gồm bốn chương trình C minh hoạ các thao tác cốt lõi ở user-space:
+
+| Chương trình | Mô tả |
+|---|---|
+| `proc_info.c` | Liệt kê tiến trình đang chạy bằng cách duyệt thư mục `/proc` |
+| `file_ops.c` | Tạo, ghi, đọc file và xem thông tin qua syscall POSIX |
+| `tcp_server.c` | TCP server: lắng nghe, nhận kết nối, echo dữ liệu về client |
+| `tcp_client.c` | TCP client: kết nối tới server và gửi dữ liệu |
+
+### 3.2 Quản lý tiến trình — `proc_info.c`
+
+Thay vì dùng lệnh `ps`, chương trình đọc trực tiếp từ hệ thống file ảo `/proc`. Mỗi thư mục con có tên là số nguyên trong `/proc` tương ứng với một PID đang chạy. File `/proc/<pid>/status` chứa tên tiến trình, trạng thái và thông tin bộ nhớ:
 
 ```c
-static unsigned int hook_func(void *priv, struct sk_buff *skb,
-                              const struct nf_hook_state *state)
+DIR *dp = opendir("/proc");
+while ((entry = readdir(dp)) != NULL) {
+    if (!isdigit(entry->d_name[0])) continue;   /* chỉ lấy thư mục PID */
+    snprintf(path, sizeof(path), "/proc/%s/status", entry->d_name);
+    /* đọc và in Name, State, VmRSS từ file status */
+}
+```
+
+### 3.3 Thao tác file — `file_ops.c`
+
+Minh hoạ bốn syscall cơ bản của POSIX:
+- `open()` — mở/tạo file với flag (`O_CREAT`, `O_WRONLY`, `O_RDONLY`).
+- `write()` / `read()` — ghi và đọc dữ liệu nhị phân.
+- `stat()` — lấy thông tin file (kích thước, thời gian, quyền truy cập).
+- `close()` — đóng file descriptor.
+
+### 3.4 Lập trình socket TCP — `tcp_server.c` và `tcp_client.c`
+
+Server tạo socket, bind cổng, listen và vòng lặp accept để phục vụ nhiều client:
+
+```c
+int sfd = socket(AF_INET, SOCK_STREAM, 0);
+setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+bind(sfd, (struct sockaddr *)&addr, sizeof(addr));
+listen(sfd, 5);
+
+while (1) {
+    int cfd = accept(sfd, NULL, NULL);
+    recv(cfd, buf, sizeof(buf), 0);
+    send(cfd, buf, strlen(buf), 0);   /* echo */
+    close(cfd);
+}
+```
+
+Client kết nối và gửi chuỗi do người dùng nhập, sau đó nhận và in phản hồi từ server.
+
+*[Hình 3.1 — Chạy tcp_server và tcp_client trong hai terminal]*
+
+---
+
+## CHƯƠNG 4. MODULE NHÂN — GIẤU TIN TRONG GÓI TCP
+
+### 4.1 Đặt vấn đề
+
+**Steganography** (kỹ thuật giấu tin) là phương pháp ẩn thông điệp trong một vật chứa (carrier) sao cho người ngoài không nhận ra sự tồn tại của thông tin ẩn. Khác với mã hóa (biến nội dung thành không đọc được), steganography **giữ nguyên bề ngoài** của dữ liệu truyền đi.
+
+**Steganography mạng** (network steganography) sử dụng các trường ít dùng hoặc dư thừa trong header gói tin để mang dữ liệu ẩn. Các vật chứa phổ biến:
+- Trường **IP Identification** (16-bit) — dùng để tái hợp phân mảnh, thường là số ngẫu nhiên.
+- Các bit dự phòng trong TCP header (Reserved bits).
+- Trường **IP TTL** — giá trị giảm dần, có thể mã hóa thông tin theo quy luật thay đổi.
+- **Timing covert channel** — mã hóa bit qua khoảng cách thời gian giữa các gói.
+
+Module `steg_net` sử dụng trường **IP Identification** vì:
+1. 16-bit đủ để mang 1 byte ký tự + 1 byte magic marker.
+2. Hầu hết kernel hiện đại đặt IP ID = giá trị ngẫu nhiên cho từng gói — thay thế nó không gây phân mảnh.
+3. Kỹ thuật đọc/ghi đơn giản, không ảnh hưởng định tuyến hay TCP handshake.
+
+### 4.2 Cơ sở lý thuyết
+
+#### 4.2.1 Module nhân Linux (LKM)
+
+**Loadable Kernel Module** là đoạn mã chạy trong không gian nhân (kernel space — ring 0), có thể nạp vào nhân đang chạy mà không cần khởi động lại hệ thống. Module phải khai báo hai hàm:
+
+```c
+module_init(ten_ham_init);   /* gọi khi insmod */
+module_exit(ten_ham_exit);   /* gọi khi rmmod  */
+MODULE_LICENSE("GPL");
+```
+
+Biên dịch module dùng hệ thống build của nhân (`kbuild`) với `obj-m` trong Makefile:
+
+```makefile
+obj-m += steg_net.o
+$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+```
+
+Nạp và gỡ module:
+
+```bash
+sudo insmod steg_net.ko peer_ip=127.0.0.1 'secret="HELLO"'
+sudo rmmod steg_net
+dmesg | grep steg   # xem log từ module
+```
+
+#### 4.2.2 Kiến trúc tầng mạng trong nhân Linux
+
+Khi một gói tin đi qua hệ thống, nó được biểu diễn bằng cấu trúc `struct sk_buff` (socket buffer) — "gói bọc" trung tâm chứa con trỏ tới từng tầng header:
+
+- `ip_hdr(skb)` → `struct iphdr` — IP header (giao thức, địa chỉ nguồn/đích, IP ID).
+- `tcp_hdr(skb)` → `struct tcphdr` — TCP header (cổng, cờ SYN/ACK/FIN).
+- `udp_hdr(skb)` → `struct udphdr` — UDP header (cổng nguồn/đích).
+
+Toàn bộ lưu lượng mạng — kể cả localhost — đều đi qua nhân và có thể bị bắt/sửa tại đây.
+
+#### 4.2.3 Framework Netfilter
+
+**Netfilter** cho phép đăng ký hàm callback (hook) vào các điểm cố định trên đường đi của gói tin. Đây là nền tảng của `iptables`. Các điểm hook IPv4 chính:
+
+| Hook | Vị trí | Ứng dụng |
+|---|---|---|
+| `NF_INET_PRE_ROUTING` | Trước khi định tuyến | Bắt gói **đến** từ mạng |
+| `NF_INET_LOCAL_OUT` | Gói do máy tạo ra, đi ra | Bắt gói **đi** từ máy |
+| `NF_INET_POST_ROUTING` | Sau định tuyến, sắp rời máy | NAT nguồn |
+
+Đăng ký hook bằng `struct nf_hook_ops` và `nf_register_net_hook()`:
+
+```c
+static struct nf_hook_ops my_ops = {
+    .hook    = my_hook_fn,
+    .pf      = PF_INET,
+    .hooknum = NF_INET_PRE_ROUTING,
+    .priority = NF_IP_PRI_FIRST,
+};
+nf_register_net_hook(&init_net, &my_ops);
+```
+
+Hàm hook trả về `NF_ACCEPT` (cho gói đi tiếp) hoặc `NF_DROP` (hủy gói).
+
+#### 4.2.4 Trường IP Identification
+
+Theo RFC 791, trường **IP ID** (16-bit) dùng để tái hợp các phân mảnh IP: các mảnh của cùng một gói có cùng IP ID. Đối với gói không bị phân mảnh (phổ biến trong mạng LAN và loopback), giá trị IP ID không mang ý nghĩa đặc biệt — nhân Linux gán giá trị ngẫu nhiên. Vì vậy, thay thế IP ID bằng một giá trị có cấu trúc là vô hại và không thể phân biệt bằng quan sát bề ngoài.
+
+### 4.3 Thiết kế module `steg_net`
+
+#### 4.3.1 Kỹ thuật giấu tin
+
+Module mã hóa mỗi ký tự của `secret` vào trường IP ID như sau:
+
+```
+IP_ID (16 bit):
+┌────────────────┬──────────────────┐
+│ Byte cao 0xAB  │  Byte thấp = ký tự │
+│ (magic marker) │  secret[pos]       │
+└────────────────┴──────────────────┘
+   Ví dụ: secret="HELLO", gói đầu → IP_ID = 0xAB48 ('H' = 0x48)
+```
+
+- **Magic marker `0xAB`** ở byte cao giúp phía nhận nhận biết đây là "gói steg", phân biệt với lưu lượng TCP thông thường.
+- Byte thấp chứa ký tự thứ `pos` của thông điệp, vị trí tăng dần theo từng gói.
+- Khi hết thông điệp, pos quay vòng lại từ đầu.
+
+Sau khi sửa IP ID, phải tính lại **IP checksum** để gói tin hợp lệ:
+
+```c
+iph->id    = htons(new_id);
+iph->check = 0;
+iph->check = ip_fast_csum((u8 *)iph, iph->ihl);
+```
+
+#### 4.3.2 Hai hook Netfilter
+
+Module đăng ký hai hook:
+
+| Hook | Điểm | Nhiệm vụ |
+|---|---|---|
+| `embed_hook` | `NF_INET_LOCAL_OUT` | Gói TCP ra ngoài tới `peer_ip` → nhúng ký tự vào IP ID |
+| `extract_hook` | `NF_INET_PRE_ROUTING` | Gói TCP đến từ `peer_ip` → đọc IP ID, tái tạo thông điệp |
+
+#### 4.3.3 Tham số module
+
+```bash
+sudo insmod steg_net.ko peer_ip=<địa_chỉ_IP> 'secret="<thông_điệp>"'
+```
+
+| Tham số | Mô tả | Mặc định |
+|---|---|---|
+| `peer_ip` | IP đích để nhúng tin / IP nguồn để trích tin (bắt buộc) | — |
+| `secret` | Thông điệp cần giấu | `"Hello from kernel!"` |
+
+#### 4.3.4 Theo dõi trạng thái qua `/proc`
+
+Module tạo mục `/proc/steg_net` để xem trạng thái tức thời:
+
+```bash
+cat /proc/steg_net
+# === steg_net status ===
+# secret     : "HELLO"  (5 bytes)
+# peer_ip    : 127.0.0.1
+# magic      : 0xAB
+# embed_pos  : 2  (ký tự tiếp theo: 'L')
+# extracted  : "HE"  (2 bytes)
+```
+
+### 4.4 Triển khai — Mã nguồn chính
+
+#### 4.4.1 Hàm EMBED
+
+```c
+static unsigned int embed_hook(void *priv, struct sk_buff *skb,
+                               const struct nf_hook_state *state)
 {
     struct iphdr *iph;
-    if (!skb || blocked_addr == 0) return NF_ACCEPT;
+    int  pos;
+    u16  new_id;
 
+    if (!skb || !peer_addr) return NF_ACCEPT;
     iph = ip_hdr(skb);
-    if (iph && iph->daddr == blocked_addr) {
-        pr_info("net_filter: DROP goi den %pI4\n", &iph->daddr);
-        return NF_DROP;
-    }
+    if (!iph || iph->protocol != IPPROTO_TCP) return NF_ACCEPT;
+    if (iph->daddr != peer_addr) return NF_ACCEPT;
+
+    /* Lấy ký tự tại vị trí hiện tại, tăng counter */
+    pos    = atomic_inc_return(&embed_pos) - 1;
+    pos    = pos % (int)secret_len;
+    new_id = ((u16)STEG_MAGIC << 8) | (u8)secret[pos];
+
+    /* Ghi vào IP ID và tính lại checksum */
+    iph->id    = htons(new_id);
+    iph->check = 0;
+    iph->check = ip_fast_csum((u8 *)iph, iph->ihl);
+
+    pr_info("steg [EMBED] pos=%d char='%c' IP_ID=0x%04X\n",
+            pos, secret[pos], new_id);
     return NF_ACCEPT;
 }
 ```
 
-Xử lý ioctl để nhận IP từ user-space:
+#### 4.4.2 Hàm EXTRACT
 
 ```c
-static long ctl_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
+static unsigned int extract_hook(void *priv, struct sk_buff *skb,
+                                  const struct nf_hook_state *state)
 {
-    __be32 addr;
-    switch (cmd) {
-    case FILTER_SET_ADDR:
-        if (copy_from_user(&addr, (void __user *)arg, sizeof(addr)))
-            return -EFAULT;
-        blocked_addr = addr;
-        break;
-    case FILTER_CLR_ADDR:
-        blocked_addr = 0;
-        break;
-    default:
-        return -ENOTTY;
+    struct iphdr *iph;
+    u16 ip_id;
+    u8  magic, ch;
+
+    if (!skb || !peer_addr) return NF_ACCEPT;
+    iph = ip_hdr(skb);
+    if (!iph || iph->protocol != IPPROTO_TCP) return NF_ACCEPT;
+    if (iph->saddr != peer_addr) return NF_ACCEPT;
+
+    ip_id = ntohs(iph->id);
+    magic = (ip_id >> 8) & 0xFF;
+    ch    =  ip_id       & 0xFF;
+
+    if (magic != STEG_MAGIC) return NF_ACCEPT;   /* không phải gói steg */
+
+    pr_info("steg [EXTRACT] IP_ID=0x%04X char='%c'\n", ip_id, ch);
+
+    spin_lock(&extract_lock);
+    if (extract_pos < EXTRACT_MAX - 1) {
+        extracted[extract_pos++] = ch;
+        extracted[extract_pos]   = '\0';
     }
+    spin_unlock(&extract_lock);
+
+    return NF_ACCEPT;
+}
+```
+
+#### 4.4.3 Init và Exit
+
+```c
+static int __init steg_init(void)
+{
+    /* Kiểm tra tham số */
+    if (!peer_ip || !*peer_ip) { pr_err("steg_net: thiếu peer_ip\n"); return -EINVAL; }
+    if (in4_pton(peer_ip, -1, (u8 *)&peer_addr, -1, NULL) != 1) return -EINVAL;
+    secret_len = strlen(secret);
+
+    /* Đăng ký hai hook Netfilter */
+    nf_register_net_hook(&init_net, &embed_ops);
+    nf_register_net_hook(&init_net, &extract_ops);
+
+    /* Tạo mục /proc/steg_net */
+    proc_create("steg_net", 0444, NULL, &steg_proc_ops);
+
+    pr_info("steg_net: nạp xong — secret=\"%s\" peer=%pI4\n", secret, &peer_addr);
     return 0;
 }
-```
 
-#### 3.4.3 Bài 3 + 4 — TCP listen/accept trong nhân (`ksock_tcp.c`)
-
-Mô-đun tạo một socket TCP **ngay trong nhân**, bind và lắng nghe tại cổng 60000, sau đó chấp nhận kết nối và đọc dữ liệu client gửi. Toàn bộ chạy trong một *kernel thread* để không chặn quá trình nạp mô-đun.
-
-```c
-sock_create_kern(&init_net, AF_INET, SOCK_STREAM, IPPROTO_TCP, &listen_sock);
-
-addr.sin_family      = AF_INET;
-addr.sin_addr.s_addr = htonl(INADDR_ANY);
-addr.sin_port        = htons(60000);
-
-kernel_bind(listen_sock, (struct sockaddr *)&addr, sizeof(addr));
-kernel_listen(listen_sock, 5);
-
-while (!kthread_should_stop()) {
-    ret = kernel_accept(listen_sock, &conn, O_NONBLOCK);
-    if (ret == -EAGAIN) { msleep(200); continue; }
-    if (ret == 0) {
-        kernel_recvmsg(conn, &msg, &vec, 1, BUFSZ - 1, 0);  /* đọc dữ liệu */
-        sock_release(conn);
-    }
+static void __exit steg_exit(void)
+{
+    remove_proc_entry("steg_net", NULL);
+    nf_unregister_net_hook(&init_net, &extract_ops);
+    nf_unregister_net_hook(&init_net, &embed_ops);
+    pr_info("steg_net: đã trích xuất được: \"%s\"\n", extracted);
 }
 ```
 
-Việc dùng `kernel_accept` ở chế độ không chặn (`O_NONBLOCK`) kết hợp `msleep` giúp `rmmod` gỡ mô-đun sạch sẽ (nếu accept chặn vô hạn sẽ làm treo `kthread_stop`).
+### 4.5 Biên dịch và tích hợp vào nhân
 
-#### 3.4.4 Bài 5 — Gửi UDP từ nhân (`ksock_udp.c`)
+**Cài đặt phụ thuộc:**
 
-Mô-đun tạo socket UDP trong nhân và gửi một thông điệp tới địa chỉ/cổng đích (truyền qua tham số mô-đun). Sử dụng `kernel_sendmsg` với `struct msghdr` và `struct kvec`.
-
-```c
-sock_create_kern(&init_net, AF_INET, SOCK_DGRAM, IPPROTO_UDP, &sock);
-
-addr.sin_family      = AF_INET;
-addr.sin_port        = htons(dport);
-addr.sin_addr.s_addr = in_aton(dip);
-
-mhdr.msg_name    = &addr;
-mhdr.msg_namelen = sizeof(addr);
-vec.iov_base     = msg;
-vec.iov_len      = strlen(msg);
-
-kernel_sendmsg(sock, &mhdr, &vec, 1, vec.iov_len);
-sock_release(sock);
+```bash
+sudo apt update
+sudo apt install build-essential linux-headers-$(uname -r)
 ```
 
-### 3.5 Phần 4 — Web dashboard (bổ trợ)
+**Biên dịch:**
 
-Để demo trực quan, nhóm xây dựng một bảng điều khiển web tối giản bằng Flask. Backend chạy trên chính máy Ubuntu, đóng vai trò cầu nối giữa trình duyệt và hệ thống: nạp/gỡ mô-đun, **stream nhật ký dmesg theo thời gian thực**, cấu hình lọc IP. Tên mô-đun được kiểm soát bằng whitelist và địa chỉ IP được kiểm tra hợp lệ nhằm bảo đảm an toàn.
-
----
-
-## CHƯƠNG 4. KẾT QUẢ THỰC NGHIỆM
-
-### 4.1 Biên dịch
-
-Biên dịch toàn bộ mô-đun và công cụ bằng lệnh `make` trong thư mục `part3-kernel-module`. Kết quả tạo ra bốn tệp `.ko` (`net_monitor.ko`, `net_filter.ko`, `ksock_tcp.ko`, `ksock_udp.ko`) và công cụ `filter_ctl`. Cảnh báo *"Skipping BTF generation"* là vô hại (chỉ liên quan tới thông tin gỡ lỗi BTF), không ảnh hưởng tới hoạt động của mô-đun.
-
-*[Hình 4.1 — Ảnh chụp kết quả biên dịch `make` thành công]*
-
-### 4.2 Kết quả từng bài
-
-**Bài 1 — Giám sát gói tin.** Sau khi nạp `net_monitor.ko` và theo dõi `dmesg -w`, mô-đun bắt được mọi gói tin đi qua máy. Ví dụ một lát cắt nhật ký thực tế:
-
-```
-net_monitor: TCP 192.168.0.102:53270 -> 192.168.0.108:22 [ACK ]
-net_monitor: ICMP 8.8.8.8 -> 192.168.0.105
-net_monitor: UDP 127.0.0.1:35681 -> 127.0.0.53:53
-net_monitor: UDP 8.8.8.8:53 -> 192.168.0.105:55135
+```bash
+cd part3-kernel-module
+make
 ```
 
-Phân tích: dòng TCP tới cổng 22 là phiên SSH đang điều khiển máy ảo; dòng UDP tới `127.0.0.53:53` là truy vấn DNS qua systemd-resolved; dòng UDP từ `8.8.8.8:53` là phản hồi DNS của Google; dòng ICMP là gói trả lời ping. Kết quả cho thấy mô-đun bắt được cả lưu lượng localhost lẫn lưu lượng ra ngoài.
+Kết quả tạo ra `steg_net.ko`. Cảnh báo *"Skipping BTF generation"* là vô hại (liên quan đến thông tin gỡ lỗi, không ảnh hưởng hoạt động module).
 
-*[Hình 4.2 — Nhật ký dmesg của net_monitor]*
+*[Hình 4.1 — Kết quả biên dịch `make` thành công, file steg_net.ko được tạo]*
 
-**Bài 2 — Lọc theo IP đích.** Nạp `net_filter.ko`, dùng `filter_ctl set 8.8.8.8` rồi `ping 8.8.8.8` cho kết quả 100% packet loss; nhật ký dmesg hiển thị các dòng "DROP goi den 8.8.8.8". Sau khi `filter_ctl clear`, ping hoạt động trở lại bình thường.
+**Nạp module:**
 
-*[Hình 4.3 — Kết quả chặn gói: ping bị 100% packet loss và log DROP]*
-
-**Bài 3 + 4 — TCP trong nhân.** Nạp `ksock_tcp.ko`, từ một terminal khác chạy `echo "hello kernel" | nc 127.0.0.1 60000`; nhật ký dmesg hiển thị dữ liệu nhận được, chứng tỏ socket nhân đã lắng nghe và đọc dữ liệu thành công.
-
-*[Hình 4.4 — dmesg hiển thị dữ liệu nhận được từ kết nối TCP]*
-
-**Bài 5 — Gửi UDP từ nhân.** Mở listener `nc -u -l 5005`, sau đó nạp mô-đun:
-
-```
-sudo insmod ksock_udp.ko dip="127.0.0.1" dport=5005 'msg="Xin chao tu kernel"'
+```bash
+sudo insmod steg_net.ko peer_ip=127.0.0.1 'secret="HELLO"'
 ```
 
-Lưu ý: tham số `msg` chứa khoảng trắng nên phải bọc trong dấu nháy đơn bao quanh cả `key="value"` để dấu nháy kép được truyền nguyên vẹn xuống nhân (vì `insmod` ghép các tham số bằng dấu cách rồi nhân mới tách lại). Kết quả listener nhận được đúng chuỗi gửi từ nhân.
+Kiểm tra module đã nạp:
 
-*[Hình 4.5 — Listener nhận được thông điệp UDP gửi từ kernel]*
+```bash
+lsmod | grep steg_net
+```
 
-### 4.3 Đánh giá
+**Gỡ module:**
 
-| Bài | Yêu cầu | Kết quả |
-|---|---|---|
-| 1 | Giám sát/hiển thị gói tin | Đạt |
-| 2 | Lọc gói theo IP đích (ioctl) | Đạt |
-| 3 | TCP listen trong nhân | Đạt |
-| 4 | Accept kết nối trong nhân | Đạt |
-| 5 | Gửi UDP từ nhân | Đạt |
+```bash
+sudo rmmod steg_net
+```
 
-Các mô-đun nạp/gỡ ổn định, không gây lỗi nhân. Web dashboard hoạt động đúng, hỗ trợ demo trực quan.
+### 4.6 Kết quả thực nghiệm
+
+**Thiết lập demo (một VM, dùng loopback):**
+
+```bash
+# Terminal 1 — mở listener
+nc -l 7777
+
+# Terminal 2 — gửi dữ liệu TCP
+echo "test data" | nc 127.0.0.1 7777
+```
+
+**Nhật ký kernel (dmesg):**
+
+```
+steg_net: nạp xong — secret="HELLO" peer=127.0.0.1
+steg [EMBED] pos=0  char='H'(0x48)  IP_ID=0xAB48  -> 127.0.0.1
+steg [EMBED] pos=1  char='E'(0x45)  IP_ID=0xAB45  -> 127.0.0.1
+steg [EMBED] pos=2  char='L'(0x4C)  IP_ID=0xAB4C  -> 127.0.0.1
+steg [EXTRACT] IP_ID=0xAB48  magic=0xAB  char='H'  from 127.0.0.1
+steg [EXTRACT] IP_ID=0xAB45  magic=0xAB  char='E'  from 127.0.0.1
+```
+
+*[Hình 4.2 — Nhật ký dmesg hiển thị quá trình embed và extract]*
+
+**Trạng thái /proc:**
+
+```bash
+cat /proc/steg_net
+```
+
+```
+=== steg_net status ===
+secret      : "HELLO"  (5 bytes)
+peer_ip     : 127.0.0.1
+magic       : 0xAB
+embed_pos   : 3  (ký tự tiếp theo: 'L')
+extracted   : "HEL"  (3 bytes)
+```
+
+*[Hình 4.3 — Nội dung /proc/steg_net]*
+
+**Kết quả khi rmmod:**
+
+```
+steg_net: đã trích xuất được: "HELLO"
+```
+
+*[Hình 4.4 — Thông điệp trích xuất đầy đủ khi gỡ module]*
+
+### 4.7 Đánh giá
+
+| Yêu cầu | Kết quả |
+|---|---|
+| Xây dựng module nhân hợp lệ, nạp/gỡ ổn định | Đạt |
+| Đăng ký hook Netfilter, bắt gói TCP | Đạt |
+| Nhúng ký tự vào trường IP ID và tính lại checksum | Đạt |
+| Trích xuất và tái tạo thông điệp từ gói đến | Đạt |
+| Theo dõi trạng thái qua `/proc/steg_net` | Đạt |
+| Không gây crash nhân, gỡ module sạch sẽ | Đạt |
 
 ---
 
 ## KẾT LUẬN
 
-Nhóm đã hoàn thành đề tài với trọng tâm là lập trình mạng ở mức nhân Linux: nắm được kiến trúc network stack, cơ chế Netfilter, cách đọc gói tin qua `sk_buff` và lập trình socket trong không gian nhân. Năm bài thực hành networking đều được triển khai thành mô-đun độc lập, biên dịch và chạy thành công trên Ubuntu kernel 5.15. Các phần bổ trợ về shell và user-space giúp hoàn thiện bức tranh tổng thể từ tầng ứng dụng xuống tầng nhân, kèm một web dashboard hỗ trợ demo.
+Nhóm đã hoàn thành đề tài với ba phần rõ ràng:
 
-**Hướng phát triển:** mở rộng bộ lọc theo cả cổng và giao thức, hỗ trợ IPv6, thống kê lưu lượng theo thời gian thực, và bổ sung cơ chế xác thực cho web dashboard để có thể dùng an toàn ngoài môi trường demo.
+- **Phần 1 (Shell)**: bốn script Bash tự động hoá các tác vụ quản trị hệ thống thường gặp.
+- **Phần 2 (C user-space)**: bốn chương trình minh hoạ quản lý tiến trình, file và lập trình socket TCP.
+- **Phần 3 (Module nhân)**: module `steg_net` triển khai kỹ thuật giấu tin trong trường IP ID của gói TCP, sử dụng Netfilter hook — kết hợp lý thuyết mạng, lập trình nhân và bảo mật thông tin trong một demo trực quan.
+
+Qua đề tài, nhóm đã nắm được vòng đời của module nhân, kiến trúc network stack, cách đọc/sửa header gói tin qua `struct sk_buff` và cơ chế Netfilter — những nền tảng quan trọng cho lập trình hệ thống ở mức thấp.
+
+**Hướng phát triển:** mở rộng sang giấu tin trong TCP Sequence Number hoặc TTL để tăng băng thông kênh ẩn; triển khai mã hóa thông điệp trước khi giấu để tăng tính bảo mật; hỗ trợ IPv6.
 
 ---
 
 ## TÀI LIỆU THAM KHẢO
 
 1. Linux Kernel Labs — *Networking*. https://linux-kernel-labs.github.io/refs/heads/master/labs/networking.html
-2. Robert Love, *Linux Kernel Development*, 3rd Edition, Addison-Wesley.
-3. The Linux Kernel Documentation — *Netfilter*. https://www.kernel.org/doc/html/latest/networking/
-4. Tài liệu mã nguồn nhân Linux: `include/linux/skbuff.h`, `include/linux/netfilter.h`, `net/socket.c`.
+2. Robert Love, *Linux Kernel Development*, 3rd Edition, Addison-Wesley, 2010.
+3. The Linux Kernel Documentation — *Networking*. https://www.kernel.org/doc/html/latest/networking/
+4. W. Mazurczyk, S. Wendzel, *Information Hiding in Communication Networks*, IEEE Press, 2016.
+5. Mã nguồn nhân Linux: `include/linux/skbuff.h`, `include/linux/netfilter.h`, `net/socket.c`.

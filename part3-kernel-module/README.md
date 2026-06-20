@@ -1,76 +1,113 @@
-# Phần 3 — Kernel Module: Networking
+# Phần 3 — Kernel Module: Giấu tin trong gói TCP
 
-Triển khai đầy đủ **5 bài tập** của lab Networking (Linux Kernel Labs), mỗi bài là một module độc lập.
+Module nhân duy nhất `steg_net.ko` thực hiện kỹ thuật **network steganography**:
+nhúng thông điệp bí mật vào trường **IP Identification** của gói TCP, và trích xuất
+thông điệp từ phía nhận — toàn bộ ở mức nhân thông qua Netfilter hook.
 
-| Bài | File | Nội dung |
+## Nguyên lý
+
+```
+IP ID (16-bit):
+┌──────────────────┬────────────────────┐
+│  Byte cao = 0xAB │  Byte thấp = ký tự │
+│  (magic marker)  │  secret[pos]        │
+└──────────────────┴────────────────────┘
+
+Ví dụ: secret="HELLO"
+  Gói 1 → IP_ID = 0xAB48  ('H')
+  Gói 2 → IP_ID = 0xAB45  ('E')
+  ...
+```
+
+## Tham số module
+
+| Tham số | Mô tả | Mặc định |
 |---|---|---|
-| 1 | `net_monitor.c` | Giám sát & log packet TCP/UDP/ICMP qua netfilter hook |
-| 2 | `net_filter.c` + `filter_ctl.c` | Lọc (DROP) packet theo IP đích, cấu hình qua **ioctl** |
-| 3+4 | `ksock_tcp.c` | Tạo socket TCP **trong kernel**, listen cổng 60000, accept & đọc dữ liệu |
-| 5 | `ksock_udp.c` | Gửi tin nhắn **UDP từ kernel** (`kernel_sendmsg`) |
+| `peer_ip` | IP đích (embed) / IP nguồn (extract) — **bắt buộc** | — |
+| `secret` | Thông điệp cần giấu | `"Hello from kernel!"` |
 
-## Kiến thức áp dụng
-
-- **Netfilter**: `struct nf_hook_ops`, `nf_register_net_hook()`, `NF_ACCEPT`/`NF_DROP`
-- **sk_buff**: `ip_hdr()`, `tcp_hdr()`, `udp_hdr()` đọc header gói tin
-- **Kernel socket**: `sock_create_kern()`, `kernel_bind/listen/accept`, `kernel_recvmsg/sendmsg`
-- **Misc device + ioctl**: giao tiếp user-space ↔ kernel để cấu hình
-- **kthread**: chạy server lắng nghe trong kernel thread
-
-## Build tất cả
+## Build
 
 ```bash
-make            # tạo *.ko + công cụ filter_ctl
+# Cài phụ thuộc (1 lần)
+sudo apt install -y build-essential linux-headers-$(uname -r)
+
+# Build
+make            # → steg_net.ko
+
+# Dọn dẹp
 make clean
 ```
 
-## Chạy từng bài
+## Chạy demo (một VM, loopback)
 
-### Bài 1 — Giám sát packet
 ```bash
-sudo insmod net_monitor.ko
-sudo dmesg -w
-ping -c2 8.8.8.8 ; curl -s http://example.com >/dev/null   # sinh lưu lượng
-sudo rmmod net_monitor
+# Bước 1 — nạp module
+sudo insmod steg_net.ko peer_ip=127.0.0.1 'secret="HELLO"'
+
+# Bước 2 — mở listener (terminal 1)
+nc -l 7777
+
+# Bước 3 — gửi dữ liệu TCP (terminal 2)
+echo "test" | nc 127.0.0.1 7777
+
+# Bước 4 — xem log embed/extract
+sudo dmesg | grep steg
+
+# Bước 5 — xem trạng thái realtime
+cat /proc/steg_net
+
+# Bước 6 — gỡ module (in thông điệp trích xuất)
+sudo rmmod steg_net
+sudo dmesg | tail -5
 ```
 
-### Bài 2 — Lọc theo IP đích (ioctl)
-```bash
-sudo insmod net_filter.ko
-sudo ./filter_ctl set 8.8.8.8     # chặn gói đến 8.8.8.8
-ping -c3 8.8.8.8                  # -> 100% packet loss; xem 'DROP' trong dmesg
-sudo ./filter_ctl clear           # bỏ chặn
-sudo rmmod net_filter
+### Ví dụ log dmesg
+
+```
+steg_net: loaded — secret="HELLO" peer=127.0.0.1
+steg [EMBED] pos=0  char='H'(0x48)  IP_ID=0xAB48  -> 127.0.0.1
+steg [EMBED] pos=1  char='E'(0x45)  IP_ID=0xAB45  -> 127.0.0.1
+steg [EXTRACT] IP_ID=0xAB48  char='H'  from 127.0.0.1
+steg_net: đã trích xuất: "HELLO"
 ```
 
-### Bài 3+4 — TCP listen/accept trong kernel
-```bash
-sudo insmod ksock_tcp.ko
-sudo dmesg -w                     # cửa sổ 1
-# cửa sổ 2:
-echo "hello kernel" | nc 127.0.0.1 60000
-# -> dmesg in ra dữ liệu nhận được
-sudo rmmod ksock_tcp
+### /proc/steg_net
+
+```
+=== steg_net status ===
+secret    : "HELLO"  (5 bytes)
+peer_ip   : 127.0.0.1
+magic     : 0xAB
+embed_pos : 2  (ký tự tiếp theo: 'L')
+extracted : "HE"  (2 bytes)
 ```
 
-### Bài 5 — Gửi UDP từ kernel
+## Demo hai VM
+
 ```bash
-# Cửa sổ 1: mở listener trước
-nc -u -l 5005
-# Cửa sổ 2:
-sudo insmod ksock_udp.ko dip="127.0.0.1" dport=5005 'msg="Xin chao tu kernel"'
-# Lưu ý: msg có khoảng trắng → phải bọc ngoặc ĐƠN bao quanh cả key=value,
-# để dấu ngoặc kép được truyền nguyên xuống kernel. insmod nối args bằng dấu
-# cách rồi kernel tách lại — ngoặc kép trong chuỗi kernel mới xử lý đúng.
-# -> listener nhận được chuỗi; dmesg báo "da gui N byte"
-sudo rmmod ksock_udp
+# VM A (sender) — IP ví dụ 192.168.1.100
+sudo insmod steg_net.ko peer_ip=192.168.1.200 'secret="Secret message"'
+nc 192.168.1.200 8080    # gửi TCP → mỗi gói mang 1 ký tự ẩn
+
+# VM B (receiver) — IP ví dụ 192.168.1.200
+sudo insmod steg_net.ko peer_ip=192.168.1.100
+nc -l 8080               # nhận TCP → dmesg hiển thị từng ký tự trích xuất
 ```
 
-## Lưu ý quan trọng
+## Kiến thức áp dụng
+
+- **Netfilter**: `struct nf_hook_ops`, `nf_register_net_hook()`, `NF_ACCEPT`
+- **sk_buff**: `ip_hdr()` truy cập IP header, đọc/ghi trường `id`
+- **IP checksum**: `ip_fast_csum()` tính lại sau khi sửa header
+- **atomic_t**: đếm `embed_pos` an toàn khi hook chạy concurrent
+- **spinlock**: bảo vệ buffer `extracted` (hook chạy trong softirq context)
+- **/proc**: `proc_create()` + `seq_file` để hiển thị trạng thái
+
+## Lưu ý
 
 - **Snapshot VMware trước khi `insmod`** — lỗi kernel có thể panic máy ảo.
-- Luôn `rmmod` trước khi tắt máy/sửa code.
-- API có thể đổi giữa các phiên bản kernel. Code này dùng API kernel **≥ 5.x**
-  (đã test trên Ubuntu 22.04 / kernel 5.15). Nếu kernel quá mới/cũ, một vài hàm
-  (`kernel_accept` flags, `sock_create_kern`) có thể cần chỉnh nhẹ.
-- Nếu file bị lỗi ký tự `\r` (do tạo trên Windows): `dos2unix *.c Makefile`.
+- Luôn `sudo rmmod steg_net` trước khi sửa code và build lại.
+- API nhân có thể thay đổi theo phiên bản. Code này dùng API kernel **≥ 5.6**
+  (`proc_ops` thay `file_operations` cho `/proc`). Test trên Ubuntu 22.04 / kernel 5.15.
+- File tạo trên Windows bị dính `\r`: chạy `dos2unix *.c Makefile` trước khi build.

@@ -26,8 +26,8 @@ TRUONG = "HỌC VIỆN KỸ THUẬT MẬT MÃ"
 KHOA = "KHOA CÔNG NGHỆ THÔNG TIN"
 MON = "LẬP TRÌNH NHÂN LINUX"
 DE_TAI = ("Đề tài 42: Lập trình shell quản lý hệ thống; quản lý tiến trình, "
-          "file, socket & network trong Ubuntu; xây dựng mô-đun nhân tích hợp "
-          "vào hệ thống — Networking")
+          "file, socket & network trong Ubuntu; xây dựng mô-đun nhân "
+          "giấu tin trong gói TCP/UDP tích hợp vào hệ thống")
 THANH_VIEN = [
     "Ngô Hồng Phong",
     "Ngô Minh Cường",

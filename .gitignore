@@ -5,6 +5,7 @@
 *.xls
 *.doc
 *.ppt
+*.pdf
 ~$*
 
 # ===== Kernel module build (Phần 3) =====
@@ -26,7 +27,6 @@ part2-userspace/tcp_server
 part2-userspace/tcp_client
 part2-userspace/proc_info
 part2-userspace/file_ops
-part3-kernel-module/filter_ctl
 *.out
 demo.txt
 

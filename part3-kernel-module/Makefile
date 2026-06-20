@@ -1,24 +1,48 @@
-# Makefile cho cac kernel module (Bai 1-5) + cong cu user-space
-# Build: make    |    Clean: make clean
+# Makefile — steg_net: module giấu tin trong gói TCP
+#
+# Build:   make
+# Nạp:     make load
+# Gỡ:      make unload
+# Demo:    make demo
+# Dọn:     make clean
 
-# Moi dong .o se bien dich thanh mot .ko rieng
-obj-m += net_monitor.o     # Bai 1: giam sat packet
-obj-m += net_filter.o      # Bai 2: loc packet theo IP dich (ioctl)
-obj-m += ksock_tcp.o       # Bai 3+4: TCP listen/accept trong kernel
-obj-m += ksock_udp.o       # Bai 5: gui UDP tu kernel
+obj-m += steg_net.o
 
 KDIR := /lib/modules/$(shell uname -r)/build
 PWD  := $(shell pwd)
 
-all: modules filter_ctl
+# Thay đổi peer_ip và secret tuỳ môi trường
+PEER   ?= 127.0.0.1
+SECRET ?= Hello kernel
 
-modules:
+all:
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
 
-# Cong cu user-space dieu khien net_filter (Bai 2)
-filter_ctl: filter_ctl.c
-	gcc -Wall -O2 -o filter_ctl filter_ctl.c
+load: all
+	sudo insmod steg_net.ko peer_ip=$(PEER) 'secret="$(SECRET)"'
+	@echo "==> Nạp xong. Xem log: sudo dmesg | grep steg"
+	@echo "==> Trạng thái: cat /proc/steg_net"
+
+unload:
+	sudo rmmod steg_net || true
+	@echo "==> Đã gỡ module"
+
+# Demo tự động trên loopback
+demo: load
+	@echo ""
+	@echo "=== Mở listener port 7777 (background) ==="
+	nc -l 7777 &
+	sleep 0.5
+	@echo "=== Gửi dữ liệu TCP (trigger embed) ==="
+	echo "steg demo payload" | nc -q1 127.0.0.1 7777 || true
+	sleep 0.3
+	@echo ""
+	@echo "=== /proc/steg_net ==="
+	cat /proc/steg_net
+	@echo ""
+	@echo "=== dmesg (steg) ==="
+	sudo dmesg | grep steg | tail -30
+	@$(MAKE) unload
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
-	rm -f filter_ctl
