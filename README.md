@@ -28,6 +28,7 @@ Quản lý tiến trình, file và socket mạng trong C (POSIX/syscall):
 - `tcp_server.c` / `tcp_client.c` — socket TCP echo
 
 ### Phần 3 — Kernel module (`part3-kernel-module/`) — *TRỌNG TÂM*
+
 Module nhân `steg_net.ko`: **giấu tin trong gói TCP** (network steganography).
 
 Kỹ thuật: nhúng từng byte của thông điệp bí mật vào trường **IP Identification**
@@ -65,10 +66,6 @@ networking/
 ├── part3-kernel-module/        ← MODULE NHÂN (trọng tâm)
 │   ├── steg_net.c              ← module giấu tin trong TCP
 │   └── Makefile
-├── part4-web/                  ← web demo bổ trợ (Flask)
-│   ├── app.py
-│   ├── templates/
-│   └── static/
 └── docs/
     ├── BAOCAO.md               ← nguồn báo cáo (Markdown)
     ├── build_docx.py           ← sinh BaoCao_DeTai42_Networking.docx
@@ -91,11 +88,10 @@ sudo apt install -y gcc make linux-headers-$(uname -r)
 # Kiểm tra: ls /lib/modules/$(uname -r)/build  (phải có thư mục này)
 ```
 
-**Bước 3 — Python & Flask (web demo)**
+**Bước 3 — Python (sinh tài liệu)**
 ```bash
 sudo apt install -y python3 python3-pip
-pip3 install flask
-# Nếu lỗi "externally-managed-environment": sudo apt install -y python3-flask
+pip3 install python-docx python-pptx
 ```
 
 **Bước 4 — Gói at (lập lịch một lần, Phần 1)**
@@ -116,7 +112,7 @@ find . -type f \( -name "*.sh" -o -name "*.c" -o -name "Makefile" -o -name "*.py
 ```bash
 gcc --version | head -1
 ls /lib/modules/$(uname -r)/build
-python3 -c "import flask; print('flask ok')"
+python3 -c "import docx, pptx; print('python-docx, python-pptx ok')"
 ```
 
 ## Chạy nhanh
